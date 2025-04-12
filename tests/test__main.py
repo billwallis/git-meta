@@ -1,8 +1,8 @@
 """
-Unit tests for the ``src.main`` module.
+Unit tests for the ``git_meta.main`` module.
 """
 
-from src import main
+from git_meta import main
 
 
 def test__main():

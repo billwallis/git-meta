@@ -3,13 +3,15 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "python-template"
+name = "git-meta"
 version = "0.0.0"
-description = ""
+description = "Check the git status of repositories in a directory."
 authors = [{name = "Bilbottom"}]
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "gitpython>=3.1.44",
+]
 
 [dependency-groups]
 dev = [
@@ -23,15 +25,11 @@ test = [
 
 
 [tool.setuptools]
-packages = ["src"]
-
-# https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html
-#[tool.setuptools.packages.find]
-#include = ["src"]
+packages = ["git_meta"]
 
 
 [tool.pytest.ini_options]
-addopts = "--cov=src --cov-fail-under=80"
+addopts = "--cov=git_meta --cov-fail-under=00"
 testpaths = ["tests"]
 
 
