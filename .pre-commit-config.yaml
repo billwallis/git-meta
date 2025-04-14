@@ -1,7 +1,7 @@
 ---
 ci:
   autoupdate_schedule: quarterly
-  skip: ["identity", "uv-lock", "pytest", "coverage-badge"]
+  skip: ["identity", "uv-lock"]
 
 repos:
   - repo: meta
@@ -32,7 +32,7 @@ repos:
         name: Validate Python
 
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.6.12 # reminder: keep aligned with the GitHub actions
+    rev: 0.6.14 # reminder: keep aligned with the GitHub actions
     hooks:
       - id: uv-lock
         name: Check that the lock file is up-to-date
@@ -45,25 +45,10 @@ repos:
         name: Make code pretty
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.4
+    rev: v0.11.5
     hooks:
       - id: ruff
         name: Lint Python code
         args: ["--fix"]
       - id: ruff-format
         name: Format Python code
-#  # Testing and coverage
-#  - repo: local
-#    hooks:
-#      - id: pytest
-#        name: Run unit tests
-#        entry: pytest tests --quiet
-#        language: system
-#        pass_filenames: false
-#        always_run: true
-#      - id: coverage-badge
-#        name: Generate coverage badge
-#        entry: coverage-badge -o coverage.svg -f
-#        language: system
-#        pass_filenames: false
-#        always_run: true
