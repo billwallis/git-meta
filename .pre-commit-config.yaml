@@ -2,7 +2,7 @@
 ---
 ci:
   autoupdate_schedule: quarterly
-  skip: ["identity", "uv-lock", "ty", "pytest", "coverage-badge"]
+  skip: ["identity", "uv-lock", "ty"]
 
 default_install_hook_types: ["pre-commit", "pre-push"]
 default_stages: ["pre-commit"]
@@ -93,25 +93,3 @@ repos:
         args: ["--schemafile", "https://json.schemastore.org/pyproject.json"]
         # This calls a remote URL, so run on pre-push to avoid slowing down commits
         stages: ["pre-push"]
-
-  - repo: local
-    hooks:
-      - id: pytest
-        name: Run unit tests
-        entry: uv run pytest tests --quiet --cov-report=xml
-        stages: ["pre-push"]
-        language: unsupported
-        pass_filenames: false
-        always_run: true
-      - id: coverage-badge
-        name: Generate coverage badge
-        entry: >
-          genbadge coverage
-          --input-file 'coverage.xml'
-          --output-file coverage.svg
-          --silent
-        additional_dependencies: ["genbadge[coverage]==1.1.3"]
-        stages: ["pre-push"]
-        language: python
-        pass_filenames: false
-        always_run: true

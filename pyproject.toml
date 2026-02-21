@@ -20,19 +20,14 @@ dev = [
     "poethepoet>=0.41.0",
     "pre-commit>=4.5.1",
 ]
-test = [
-    "pytest>=9.0.2",
-    "pytest-cov>=7.0.0",
-]
+
+[project.scripts]
+git-meta = "git_meta.main:main"
 
 
 [tool.uv]
 required-version = ">=0.8,<1.0"
 default-groups = "all"
-
-[tool.uv.build-backend]
-module-name = "git_meta"
-module-root = ""
 
 
 [tool.poe]
@@ -48,7 +43,6 @@ upgrade.shell = """
     uv sync --refresh --upgrade
     uv run pre-commit autoupdate
 """
-test = "uv run pytest -vvv"
 
 [tool.poe.tasks.lint]
 control.expr = "sys.platform"
@@ -69,11 +63,6 @@ shell = """
     echo '\\033[0;34mpre-push checks\\033[0m'
     SKIP=identity uv run pre-commit run --all-files --hook-stage pre-push
 """
-
-
-[tool.pytest.ini_options]
-addopts = "--cov=git_meta --cov-fail-under=00"
-testpaths = ["tests"]
 
 
 [tool.ruff]
