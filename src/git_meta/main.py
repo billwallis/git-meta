@@ -11,6 +11,22 @@ SUCCESS = 0
 FAILURE = 1
 HERE = pathlib.Path(__file__).parent
 
+RED = "\033[1;31m"
+GREEN = "\033[1;32m"
+YELLOW = "\033[1;33m"
+BLUE = "\033[1;34m"
+GREY = "\033[38;5;240m"
+BOLD = "\033[1m"
+RESET = "\033[0m"
+
+
+def colour(text: str, colour_: str) -> str:
+    """
+    Return the text in the given colour.
+    """
+
+    return f"{colour_}{text}{RESET}"
+
 
 def _get_git_repos(directory: pathlib.Path) -> list[git.Repo]:
     """
@@ -32,8 +48,25 @@ def print_repo_statuses(repositories: list[git.Repo], print_all: bool) -> None:
     if print_all:
         print("\nRepository statuses:")
         for repo in repositories:
-            print(f"\n{repo.working_tree_dir}")
-            print(textwrap.indent(repo.git.status(), prefix=" " * 4))
+            for remote in repo.remotes:
+                remote.fetch()
+            print(colour(f"\n{repo.working_tree_dir}", BOLD + BLUE))
+
+            col = GREEN
+            if repo.is_dirty():
+                col = RED
+            if (
+                "Your branch is behind" in repo.git.status()
+                or "Untracked files" in repo.git.status()
+            ):
+                col = YELLOW
+
+            print(
+                textwrap.indent(
+                    colour(repo.git.status(), col),
+                    prefix=" " * 4,
+                )
+            )
 
     print("\nRepositories that need reviewing:")
     for repo in repositories:
