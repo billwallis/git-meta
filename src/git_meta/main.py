@@ -33,11 +33,25 @@ def _get_git_repos(directory: pathlib.Path) -> list[git.Repo]:
     Get all git repositories in the given directory.
     """
 
-    return [
-        git.Repo(path)
-        for path in directory.glob("**/.git")
-        if path.is_dir()  # skip git submodules
-    ]
+    return sorted(
+        [
+            git.Repo(path)
+            for path in directory.glob("**/.git")
+            if path.is_dir()  # skip git submodules
+        ],
+        key=lambda r: r.working_tree_dir,
+    )
+
+
+def _get_status_colour(repository: git.Repo) -> str:
+    status = repository.git.status()
+    col = GREEN
+    if "Your branch is behind" in status or "Untracked files" in status:
+        col = YELLOW
+    if repository.is_dirty():
+        col = RED
+
+    return col
 
 
 def print_repo_statuses(repositories: list[git.Repo], print_all: bool) -> None:
@@ -49,35 +63,31 @@ def print_repo_statuses(repositories: list[git.Repo], print_all: bool) -> None:
         print("\nRepository statuses:")
         for repo in repositories:
             for remote in repo.remotes:
-                remote.fetch()
+                if remote.name == "origin":
+                    try:
+                        remote.fetch()
+                    except git.exc.GitCommandError:
+                        pass
             print(colour(f"\n{repo.working_tree_dir}", BOLD + BLUE))
-
-            col = GREEN
-            if repo.is_dirty():
-                col = RED
-            if (
-                "Your branch is behind" in repo.git.status()
-                or "Untracked files" in repo.git.status()
-            ):
-                col = YELLOW
-
             print(
                 textwrap.indent(
-                    colour(repo.git.status(), col),
+                    colour(repo.git.status(), _get_status_colour(repo)),
                     prefix=" " * 4,
                 )
             )
 
     print("\nRepositories that need reviewing:")
     for repo in repositories:
+        col = _get_status_colour(repo)
+
         if all(b.name in ["main", "master"] for b in repo.branches):
             if repo.is_dirty():
-                print(f"\n{repo.working_tree_dir}")
-                print(" " * 4, "repo is dirty")
+                print(colour(f"\n{repo.working_tree_dir}", BOLD + BLUE))
+                print(colour("    repo is dirty", col))
         else:
-            print(f"\n{repo.working_tree_dir}")
+            print(colour(f"\n{repo.working_tree_dir}", BOLD + BLUE))
             for branch in repo.branches:
-                print(" " * 4, branch.name)
+                print(colour(f"    {branch.name}", col))
 
 
 def git_report(
