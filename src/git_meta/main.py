@@ -62,13 +62,19 @@ def print_repo_statuses(repositories: list[git.Repo], print_all: bool) -> None:
     if print_all:
         print("\nRepository statuses:")
         for repo in repositories:
+            remote_url = ""
             for remote in repo.remotes:
                 if remote.name == "origin":
                     try:
                         remote.fetch()
+                        remote_url = remote.url
                     except git.exc.GitCommandError:
                         pass
+
             print(colour(f"\n{repo.working_tree_dir}", BOLD + BLUE))
+            if remote_url:
+                col = RED if remote_url.startswith("http") else GREY
+                print(colour(f"    remote URL: {remote_url}", col))
             print(
                 textwrap.indent(
                     colour(repo.git.status(), _get_status_colour(repo)),
