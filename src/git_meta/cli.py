@@ -37,7 +37,10 @@ def _get_version() -> str:
 
 
 def _update(args: argparse.Namespace) -> int:
-    git_meta.pull_repo_main_branches(pathlib.Path(getattr(args, "root-dir")))
+    git_meta.pull_repo_main_branches(
+        root_directory=pathlib.Path(getattr(args, "root-dir")),
+        fetch=args.fetch,
+    )
     return SUCCESS
 
 
@@ -67,6 +70,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser__update = subparsers.add_parser("update")
     parser__update.add_argument("root-dir")
+    parser__update.add_argument(
+        "--fetch",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
 
     parser__report = subparsers.add_parser("report")
     parser__report.add_argument("root-dir")

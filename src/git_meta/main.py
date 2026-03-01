@@ -51,7 +51,7 @@ def _get_git_repos(directory: pathlib.Path) -> list[git.Repo]:
     )
 
 
-def _get_repo_status(repository: git.Repo) -> tuple[str, RepoStatus]:
+def _get_git_repo_status(repository: git.Repo) -> tuple[str, RepoStatus]:
     status = repository.git.status()
     if "nothing to commit, working tree clean" in status:
         return status, RepoStatus.CLEAN_AND_UPDATED
@@ -78,7 +78,20 @@ def _get_status_colour(repository_status: RepoStatus) -> str:
     }[repository_status]
 
 
-def pull_repo_main_branches(root_directory: pathlib.Path) -> None:
+def _fetch_repo(repository: git.Repo) -> None:
+    try:
+        origin = repository.remote("origin")
+    except ValueError:
+        return
+
+    with contextlib.suppress(git.exc.GitCommandError):
+        origin.fetch()
+
+
+def pull_repo_main_branches(
+    root_directory: pathlib.Path,
+    fetch: bool,
+) -> None:
     """
     Pull the default branches.
     """
@@ -87,9 +100,12 @@ def pull_repo_main_branches(root_directory: pathlib.Path) -> None:
     repositories = _get_git_repos(directory=root_directory)
     print(f"Found {len(repositories)} git repositories")
     for repo in repositories:
-        status = repo.git.status()
-        if "Your branch is behind" in status and (
-            "On branch main" in status or "On branch master" in status
+        if fetch:
+            _fetch_repo(repo)
+
+        git_status, _ = _get_git_repo_status(repo)
+        if "Your branch is behind" in git_status and (
+            "On branch main" in git_status or "On branch master" in git_status
         ):
             try:
                 print(
@@ -118,14 +134,14 @@ def git_report(
     repositories = _get_git_repos(directory=root_directory)
     print(f"Found {len(repositories)} git repositories")
     for repo in repositories:
-        git_status, repo_status = _get_repo_status(repo)
+        if fetch:
+            _fetch_repo(repo)
+
         remote_url = ""
         with contextlib.suppress(ValueError):
             remote_url = repo.remote("origin").url
-        if fetch:
-            with contextlib.suppress(git.exc.GitCommandError):
-                repo.remote("origin").fetch()
 
+        git_status, repo_status = _get_git_repo_status(repo)
         repo_header = colour(f"\n{repo.working_tree_dir}", BOLD + BLUE)
         if remote_url:
             repo_header += colour(f"  (origin: {remote_url})", GREY)
