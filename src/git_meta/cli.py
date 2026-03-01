@@ -44,7 +44,9 @@ def _update(args: argparse.Namespace) -> int:
 def _report(args: argparse.Namespace) -> int:
     git_meta.git_report(
         root_directory=pathlib.Path(getattr(args, "root-dir")),
+        fetch=args.fetch,
         print_all=args.print_all,
+        quiet_level=args.quiet,
     )
     return SUCCESS
 
@@ -69,10 +71,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser__report = subparsers.add_parser("report")
     parser__report.add_argument("root-dir")
     parser__report.add_argument(
-        "--print-all", action=argparse.BooleanOptionalAction
+        "--fetch",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    parser__report.add_argument(
+        "--print-all",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+    parser__report.add_argument(
+        "-q",
+        "--quiet",
+        action="count",
+        default=0,
     )
 
     args = parser.parse_args(argv)
+    # print(args)  # for debugging
     if args.command == "update":
         return _update(args)
     if args.command == "report":

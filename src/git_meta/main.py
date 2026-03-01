@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import enum
 import pathlib
 import textwrap
@@ -50,20 +51,20 @@ def _get_git_repos(directory: pathlib.Path) -> list[git.Repo]:
     )
 
 
-def _get_repo_status(repository: git.Repo) -> RepoStatus:
+def _get_repo_status(repository: git.Repo) -> tuple[str, RepoStatus]:
     status = repository.git.status()
     if "nothing to commit, working tree clean" in status:
-        return RepoStatus.CLEAN_AND_UPDATED
+        return status, RepoStatus.CLEAN_AND_UPDATED
     if repository.is_dirty():
-        return RepoStatus.DIRTY
+        return status, RepoStatus.DIRTY
     if "Your branch is behind" in status:
-        return RepoStatus.BEHIND_REMOTE
+        return status, RepoStatus.BEHIND_REMOTE
     if "Untracked files" in status:
-        return RepoStatus.UNTRACKED_FILES
+        return status, RepoStatus.UNTRACKED_FILES
     if len(repository.branches) > 1:
-        return RepoStatus.MULTIPLE_BRANCHES
+        return status, RepoStatus.MULTIPLE_BRANCHES
 
-    return RepoStatus.UNKNOWN
+    return status, RepoStatus.UNKNOWN
 
 
 def _get_status_colour(repository_status: RepoStatus) -> str:
@@ -77,91 +78,66 @@ def _get_status_colour(repository_status: RepoStatus) -> str:
     }[repository_status]
 
 
-def _pull_repo_main_branch(repository: git.Repo) -> None:
-    """
-    Pull the default branch.
-    """
-
-    status = repository.git.status()
-    if "Your branch is behind" in status and (
-        "On branch main" in status or "On branch master" in status
-    ):
-        try:
-            print(
-                colour(
-                    f"\nUpdating {repository.working_tree_dir}...", BOLD + BLUE
-                )
-            )
-            print(textwrap.indent(repository.git.pull(), prefix="    "))
-        except TypeError:
-            print(textwrap.indent(colour("pull skipped", GREY), prefix="    "))
-
-
 def pull_repo_main_branches(root_directory: pathlib.Path) -> None:
     """
     Pull the default branches.
     """
 
-    for repo in _get_git_repos(root_directory):
-        _pull_repo_main_branch(repo)
-
-
-def _print_repo_statuses(repositories: list[git.Repo], print_all: bool) -> None:
-    """
-    Print all git repository status in the given directory.
-    """
-
-    if print_all:
-        print("\nRepository statuses:")
-        for repo in repositories:
-            remote_url = ""
-            for remote in repo.remotes:
-                if remote.name == "origin":
-                    try:
-                        remote.fetch()
-                        remote_url = remote.url
-                    except git.exc.GitCommandError:
-                        pass
-
-            if remote_url:
-                print(colour(f"\n{repo.working_tree_dir}", BOLD + BLUE), end="")
-                print(colour(f"  (origin: {remote_url})", GREY))
-            else:
-                print(colour(f"\n{repo.working_tree_dir}", BOLD + BLUE))
-
-            print(
-                textwrap.indent(
-                    colour(
-                        repo.git.status(),
-                        _get_status_colour(_get_repo_status(repo)),
-                    ),
-                    prefix=" " * 4,
-                )
-            )
-
-    print("\nRepositories that need reviewing:")
+    print(f"Updating git repositories at {root_directory}...")
+    repositories = _get_git_repos(directory=root_directory)
+    print(f"Found {len(repositories)} git repositories")
     for repo in repositories:
-        col = _get_status_colour(_get_repo_status(repo))
-
-        if all(b.name in ["main", "master"] for b in repo.branches):
-            if repo.is_dirty():
-                print(colour(f"\n{repo.working_tree_dir}", BOLD + BLUE))
-                print(colour("    repo is dirty", col))
-        else:
-            print(colour(f"\n{repo.working_tree_dir}", BOLD + BLUE))
-            for branch in repo.branches:
-                print(colour(f"    {branch.name}", col))
+        status = repo.git.status()
+        if "Your branch is behind" in status and (
+            "On branch main" in status or "On branch master" in status
+        ):
+            try:
+                print(
+                    colour(
+                        f"\nUpdating {repo.working_tree_dir}...", BOLD + BLUE
+                    )
+                )
+                print(textwrap.indent(repo.git.pull(), prefix="\t"))
+            except TypeError:
+                print(
+                    textwrap.indent(colour("pull skipped", GREY), prefix="\t")
+                )
 
 
 def git_report(
     root_directory: pathlib.Path,
+    fetch: bool,
     print_all: bool,
+    quiet_level: int,
 ) -> None:
     """
     Report on git repositories in the given directory.
     """
 
-    print(f"Getting git repositories at {root_directory}...")
-    repos = _get_git_repos(root_directory)
-    print(f"Found {len(repos)} git repositories.")
-    _print_repo_statuses(repos, print_all)
+    print(f"Reporting on git repositories at {root_directory}...")
+    repositories = _get_git_repos(directory=root_directory)
+    print(f"Found {len(repositories)} git repositories")
+    for repo in repositories:
+        git_status, repo_status = _get_repo_status(repo)
+        remote_url = ""
+        with contextlib.suppress(ValueError):
+            remote_url = repo.remote("origin").url
+        if fetch:
+            with contextlib.suppress(git.exc.GitCommandError):
+                repo.remote("origin").fetch()
+
+        repo_header = colour(f"\n{repo.working_tree_dir}", BOLD + BLUE)
+        if remote_url:
+            repo_header += colour(f"  (origin: {remote_url})", GREY)
+
+        if print_all or repo_status != RepoStatus.CLEAN_AND_UPDATED:
+            status_colour = _get_status_colour(repo_status)
+            status_message = repo_status if quiet_level > 0 else git_status
+
+            print(repo_header)
+            print(
+                textwrap.indent(
+                    colour(status_message, status_colour),
+                    prefix="\t",
+                )
+            )
