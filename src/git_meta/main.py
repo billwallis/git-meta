@@ -1,25 +1,31 @@
 from __future__ import annotations
 
-import argparse
+import contextlib
+import enum
 import pathlib
 import textwrap
-import tomllib
-from collections.abc import Sequence
 
 import git
-
-SUCCESS = 0
-FAILURE = 1
-HERE = pathlib.Path(__file__).parent
-PYPROJECT = HERE.parent.parent / "pyproject.toml"
 
 RED = "\033[1;31m"
 GREEN = "\033[1;32m"
 YELLOW = "\033[1;33m"
 BLUE = "\033[1;34m"
+MAGENTA = "\033[1;35m"
+CYAN = "\033[1;36m"
 GREY = "\033[38;5;240m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
+
+
+# TODO: These are not mutually exclusive, so an Enum is not appropriate
+class RepoStatus(enum.StrEnum):
+    CLEAN_AND_UPDATED = enum.auto()
+    UNTRACKED_FILES = enum.auto()
+    BEHIND_REMOTE = enum.auto()
+    MULTIPLE_BRANCHES = enum.auto()
+    DIRTY = enum.auto()
+    UNKNOWN = enum.auto()
 
 
 def colour(text: str, colour_: str) -> str:
@@ -30,14 +36,9 @@ def colour(text: str, colour_: str) -> str:
     return f"{colour_}{text}{RESET}"
 
 
-def _get_version() -> str:
-    pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
-    return pyproject["project"]["version"]
-
-
 def _get_git_repos(directory: pathlib.Path) -> list[git.Repo]:
     """
-    Get all git repositories in the given directory.
+    Return a sorted list of all git repositories in the given directory.
     """
 
     return sorted(
@@ -50,143 +51,109 @@ def _get_git_repos(directory: pathlib.Path) -> list[git.Repo]:
     )
 
 
-def _get_status_colour(repository: git.Repo) -> str:
+def _get_git_repo_status(repository: git.Repo) -> tuple[str, RepoStatus]:
     status = repository.git.status()
-    col = GREEN
-    if "Your branch is behind" in status or "Untracked files" in status:
-        col = YELLOW
+    if "nothing to commit, working tree clean" in status:
+        return status, RepoStatus.CLEAN_AND_UPDATED
     if repository.is_dirty():
-        col = RED
+        return status, RepoStatus.DIRTY
+    if "Your branch is behind" in status:
+        return status, RepoStatus.BEHIND_REMOTE
+    if "Untracked files" in status:
+        return status, RepoStatus.UNTRACKED_FILES
+    if len(repository.branches) > 1:
+        return status, RepoStatus.MULTIPLE_BRANCHES
 
-    return col
-
-
-def _pull_repo_main_branch(repository: git.Repo) -> None:
-    """
-    Pull the default branch.
-    """
-
-    status = repository.git.status()
-    if "Your branch is behind" in status and (
-        "On branch main" in status or "On branch master" in status
-    ):
-        try:
-            # print(colour(f"\n{repository.working_tree_dir}", BOLD + BLUE))
-            print(repository.git.pull())
-        except TypeError:
-            print(colour("pull skipped", GREY))
+    return status, RepoStatus.UNKNOWN
 
 
-def pull_repo_main_branches(root_directory: pathlib.Path) -> None:
+def _get_status_colour(repository_status: RepoStatus) -> str:
+    return {
+        RepoStatus.CLEAN_AND_UPDATED: GREEN,
+        RepoStatus.DIRTY: RED,
+        RepoStatus.UNTRACKED_FILES: YELLOW,
+        RepoStatus.BEHIND_REMOTE: YELLOW,
+        RepoStatus.MULTIPLE_BRANCHES: YELLOW,
+        RepoStatus.UNKNOWN: MAGENTA,
+    }[repository_status]
+
+
+def _fetch_repo(repository: git.Repo) -> None:
+    try:
+        origin = repository.remote("origin")
+    except ValueError:
+        return
+
+    with contextlib.suppress(git.exc.GitCommandError):
+        origin.fetch()
+
+
+def pull_repo_main_branches(
+    root_directory: pathlib.Path,
+    fetch: bool,
+) -> None:
     """
     Pull the default branches.
     """
 
-    for repo in _get_git_repos(root_directory):
-        _pull_repo_main_branch(repo)
-
-
-def print_repo_statuses(repositories: list[git.Repo], print_all: bool) -> None:
-    """
-    Get all git repositories in the given directory.
-    """
-
-    if print_all:
-        print("\nRepository statuses:")
-        for repo in repositories:
-            remote_url = ""
-            for remote in repo.remotes:
-                if remote.name == "origin":
-                    try:
-                        remote.fetch()
-                        remote_url = remote.url
-                    except git.exc.GitCommandError:
-                        pass
-
-            print(colour(f"\n{repo.working_tree_dir}", BOLD + BLUE))
-            if remote_url:
-                col = RED if remote_url.startswith("http") else GREY
-                print(colour(f"    remote URL: {remote_url}", col))
-            print(
-                textwrap.indent(
-                    colour(repo.git.status(), _get_status_colour(repo)),
-                    prefix=" " * 4,
-                )
-            )
-
-    print("\nRepositories that need reviewing:")
+    print(f"Updating git repositories at {root_directory}...")
+    repositories = _get_git_repos(directory=root_directory)
+    print(f"Found {len(repositories)} git repositories")
     for repo in repositories:
-        col = _get_status_colour(repo)
+        if fetch:
+            _fetch_repo(repo)
 
-        if all(b.name in ["main", "master"] for b in repo.branches):
-            if repo.is_dirty():
-                print(colour(f"\n{repo.working_tree_dir}", BOLD + BLUE))
-                print(colour("    repo is dirty", col))
-        else:
-            print(colour(f"\n{repo.working_tree_dir}", BOLD + BLUE))
-            for branch in repo.branches:
-                print(colour(f"    {branch.name}", col))
+        git_status, _ = _get_git_repo_status(repo)
+        if "Your branch is behind" in git_status and (
+            "On branch main" in git_status or "On branch master" in git_status
+        ):
+            try:
+                print(
+                    colour(
+                        f"\nUpdating {repo.working_tree_dir}...", BOLD + BLUE
+                    )
+                )
+                print(textwrap.indent(repo.git.pull(), prefix="\t"))
+            except TypeError:
+                print(
+                    textwrap.indent(colour("pull skipped", GREY), prefix="\t")
+                )
 
 
 def git_report(
     root_directory: pathlib.Path,
+    fetch: bool,
     print_all: bool,
+    quiet_level: int,
 ) -> None:
     """
     Report on git repositories in the given directory.
     """
 
-    print(f"Getting git repositories at {root_directory}...")
-    repos = _get_git_repos(root_directory)
-    print(f"Found {len(repos)} git repositories.")
-    print_repo_statuses(repos, print_all)
+    print(f"Reporting on git repositories at {root_directory}...")
+    repositories = _get_git_repos(directory=root_directory)
+    print(f"Found {len(repositories)} git repositories")
+    for repo in repositories:
+        if fetch:
+            _fetch_repo(repo)
 
+        remote_url = ""
+        with contextlib.suppress(ValueError):
+            remote_url = repo.remote("origin").url
 
-def _update(args: argparse.Namespace) -> int:
-    pull_repo_main_branches(pathlib.Path(getattr(args, "root-dir")))
-    return SUCCESS
+        git_status, repo_status = _get_git_repo_status(repo)
+        repo_header = colour(f"\n{repo.working_tree_dir}", BOLD + BLUE)
+        if remote_url:
+            repo_header += colour(f"  (origin: {remote_url})", GREY)
 
+        if print_all or repo_status != RepoStatus.CLEAN_AND_UPDATED:
+            status_colour = _get_status_colour(repo_status)
+            status_message = repo_status if quiet_level > 0 else git_status
 
-def _report(args: argparse.Namespace) -> int:
-    git_report(
-        root_directory=pathlib.Path(getattr(args, "root-dir")),
-        print_all=args.print_all,
-    )
-    return SUCCESS
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    """
-    Parse the arguments and run the command.
-    """
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-v",
-        "--version",
-        action="version",
-        version=_get_version(),
-    )
-    subparsers = parser.add_subparsers(dest="command")
-
-    parser__update = subparsers.add_parser("update")
-    parser__update.add_argument("root-dir")
-
-    parser__report = subparsers.add_parser("report")
-    parser__report.add_argument("root-dir")
-    parser__report.add_argument(
-        "--print-all", action=argparse.BooleanOptionalAction
-    )
-
-    args = parser.parse_args(argv)
-    if args.command == "update":
-        return _update(args)
-    if args.command == "report":
-        return _report(args)
-
-    parser.print_help()
-    return SUCCESS
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+            print(repo_header)
+            print(
+                textwrap.indent(
+                    colour(status_message, status_colour),
+                    prefix="\t",
+                )
+            )
