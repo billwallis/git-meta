@@ -87,10 +87,14 @@ def _pull_repo_main_branch(repository: git.Repo) -> None:
         "On branch main" in status or "On branch master" in status
     ):
         try:
-            # print(colour(f"\n{repository.working_tree_dir}", BOLD + BLUE))
-            print(repository.git.pull())
+            print(
+                colour(
+                    f"\nUpdating {repository.working_tree_dir}...", BOLD + BLUE
+                )
+            )
+            print(textwrap.indent(repository.git.pull(), prefix="    "))
         except TypeError:
-            print(colour("pull skipped", GREY))
+            print(textwrap.indent(colour("pull skipped", GREY), prefix="    "))
 
 
 def pull_repo_main_branches(root_directory: pathlib.Path) -> None:
@@ -119,10 +123,12 @@ def _print_repo_statuses(repositories: list[git.Repo], print_all: bool) -> None:
                     except git.exc.GitCommandError:
                         pass
 
-            print(colour(f"\n{repo.working_tree_dir}", BOLD + BLUE))
             if remote_url:
-                col = RED if remote_url.startswith("http") else GREY
-                print(colour(f"    remote URL: {remote_url}", col))
+                print(colour(f"\n{repo.working_tree_dir}", BOLD + BLUE), end="")
+                print(colour(f"  (origin: {remote_url})", GREY))
+            else:
+                print(colour(f"\n{repo.working_tree_dir}", BOLD + BLUE))
+
             print(
                 textwrap.indent(
                     colour(
