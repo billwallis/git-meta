@@ -22,6 +22,7 @@ class RepoStatus(enum.StrEnum):
     CLEAN_AND_UPDATED = enum.auto()
     UNTRACKED_FILES = enum.auto()
     BEHIND_REMOTE = enum.auto()
+    MULTIPLE_BRANCHES = enum.auto()
     DIRTY = enum.auto()
     UNKNOWN = enum.auto()
 
@@ -59,6 +60,8 @@ def _get_repo_status(repository: git.Repo) -> RepoStatus:
         return RepoStatus.BEHIND_REMOTE
     if "Untracked files" in status:
         return RepoStatus.UNTRACKED_FILES
+    if len(repository.branches) > 1:
+        return RepoStatus.MULTIPLE_BRANCHES
 
     return RepoStatus.UNKNOWN
 
@@ -67,8 +70,9 @@ def _get_status_colour(repository_status: RepoStatus) -> str:
     return {
         RepoStatus.CLEAN_AND_UPDATED: GREEN,
         RepoStatus.DIRTY: RED,
-        RepoStatus.BEHIND_REMOTE: YELLOW,
         RepoStatus.UNTRACKED_FILES: YELLOW,
+        RepoStatus.BEHIND_REMOTE: YELLOW,
+        RepoStatus.MULTIPLE_BRANCHES: YELLOW,
         RepoStatus.UNKNOWN: MAGENTA,
     }[repository_status]
 
@@ -98,7 +102,7 @@ def pull_repo_main_branches(root_directory: pathlib.Path) -> None:
         _pull_repo_main_branch(repo)
 
 
-def print_repo_statuses(repositories: list[git.Repo], print_all: bool) -> None:
+def _print_repo_statuses(repositories: list[git.Repo], print_all: bool) -> None:
     """
     Print all git repository status in the given directory.
     """
@@ -154,4 +158,4 @@ def git_report(
     print(f"Getting git repositories at {root_directory}...")
     repos = _get_git_repos(root_directory)
     print(f"Found {len(repos)} git repositories.")
-    print_repo_statuses(repos, print_all)
+    _print_repo_statuses(repos, print_all)
