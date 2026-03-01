@@ -53,8 +53,6 @@ def _get_git_repos(directory: pathlib.Path) -> list[git.Repo]:
 
 def _get_git_repo_status(repository: git.Repo) -> tuple[str, RepoStatus]:
     status = repository.git.status()
-    if "nothing to commit, working tree clean" in status:
-        return status, RepoStatus.CLEAN_AND_UPDATED
     if repository.is_dirty():
         return status, RepoStatus.DIRTY
     if "Your branch is behind" in status:
@@ -63,6 +61,8 @@ def _get_git_repo_status(repository: git.Repo) -> tuple[str, RepoStatus]:
         return status, RepoStatus.UNTRACKED_FILES
     if len(repository.branches) > 1:
         return status, RepoStatus.MULTIPLE_BRANCHES
+    if "nothing to commit, working tree clean" in status:
+        return status, RepoStatus.CLEAN_AND_UPDATED
 
     return status, RepoStatus.UNKNOWN
 
