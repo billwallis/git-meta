@@ -32,6 +32,7 @@ def colour(text: str, colour_: str) -> str:
 
 
 def _get_version() -> str:
+    # TODO: use project metadata as `pyproject.toml` is not included in installs
     pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
     return pyproject["project"]["version"]
 

@@ -96,7 +96,7 @@ def pull_repo_main_branches(
     Pull the default branches.
     """
 
-    print(f"Updating git repositories at {root_directory}...")
+    print(f"Updating git repositories at '{root_directory.resolve()}'")
     repositories = _get_git_repos(directory=root_directory)
     print(f"Found {len(repositories)} git repositories")
     for repo in repositories:
@@ -130,7 +130,7 @@ def git_report(
     Report on git repositories in the given directory.
     """
 
-    print(f"Reporting on git repositories at {root_directory}...")
+    print(f"Reporting on git repositories at '{root_directory.resolve()}'")
     repositories = _get_git_repos(directory=root_directory)
     print(f"Found {len(repositories)} git repositories")
     for repo in repositories:
