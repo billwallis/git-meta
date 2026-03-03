@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import pathlib
-import tomllib
 from collections.abc import Sequence
 
 import git_meta
@@ -32,9 +32,7 @@ def colour(text: str, colour_: str) -> str:
 
 
 def _get_version() -> str:
-    # TODO: use project metadata as `pyproject.toml` is not included in installs
-    pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
-    return pyproject["project"]["version"]
+    return f"%(prog)s {importlib.metadata.version('git-meta')}"
 
 
 def _update(args: argparse.Namespace) -> int:
