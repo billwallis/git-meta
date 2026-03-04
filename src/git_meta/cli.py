@@ -9,8 +9,6 @@ import git_meta
 
 SUCCESS = 0
 FAILURE = 1
-HERE = pathlib.Path(__file__).parent
-PYPROJECT = HERE.parent.parent / "pyproject.toml"
 
 RED = "\033[1;31m"
 GREEN = "\033[1;32m"
@@ -106,4 +104,4 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main())  # pragma: no cover
