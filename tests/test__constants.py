@@ -1,7 +1,9 @@
+import importlib
 import pathlib
-import sys
 
 import pytest
+
+from git_meta import constants
 
 
 def test__home_path_defaults_are_used(monkeypatch: pytest.MonkeyPatch):
@@ -16,12 +18,9 @@ def test__home_path_defaults_are_used(monkeypatch: pytest.MonkeyPatch):
     for env_var in env_vars:
         monkeypatch.delenv(env_var, raising=False)
 
-    # We need to import _inside_ the test since we need the env vars to have
-    # been unset _before_ importing the constants. There has to be a better
-    # alternative, though
-    sys.modules.pop("git_meta.constants", None)
-    from git_meta import constants  # noqa: PLC0415
-
+    # We need to reload the module since we need the env vars to have been
+    # unset _before_ defining the constants
+    importlib.reload(constants)
     here = pathlib.Path.cwd()
 
     assert constants.HOME == here
