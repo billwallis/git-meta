@@ -19,7 +19,7 @@ scripts.git-meta = "git_meta.cli:main"
 
 [dependency-groups]
 dev = [
-    "poethepoet>=0.41.0",
+    "poethepoet>=0.42.1",
     "pre-commit>=4.5.1",
 ]
 test = [
