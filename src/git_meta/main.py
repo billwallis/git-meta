@@ -7,6 +7,8 @@ import textwrap
 
 import git
 
+from git_meta import config
+
 RED = "\033[1;31m"
 GREEN = "\033[1;32m"
 YELLOW = "\033[1;33m"
@@ -98,14 +100,21 @@ def pull_repo_main_branches(
 
     print(f"Updating git repositories at '{root_directory.resolve()}'")
     repositories = _get_git_repos(directory=root_directory)
+    conf = config.load_config()
     print(f"Found {len(repositories)} git repositories")
     for repo in repositories:
         if fetch:
             _fetch_repo(repo)
 
         git_status, _ = _get_git_repo_status(repo)
-        if "Your branch is behind" in git_status and (
-            "On branch main" in git_status or "On branch master" in git_status
+        if repo_config := conf.repositories.get(str(repo.working_tree_dir)):
+            default_branch = repo_config.default_branch_name
+        else:
+            default_branch = "main"
+
+        if (
+            "Your branch is behind" in git_status
+            and f"On branch {default_branch}" in git_status
         ):
             try:
                 print(
