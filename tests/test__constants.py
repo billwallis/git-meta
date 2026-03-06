@@ -1,5 +1,6 @@
 import importlib
 import pathlib
+import sys
 
 import pytest
 
@@ -35,13 +36,18 @@ def test__constants__environment_variables_are_used(
     tmp_path: pathlib.Path,
 ):
     env_vars = {
-        "HOME": tmp_path,
-        "USERPROFILE": tmp_path,
         "XDG_DATA_HOME": tmp_path / "data",
         "XDG_STATE_HOME": tmp_path / "state",
         "XDG_CACHE_HOME": tmp_path / "cache",
         "XDG_CONFIG_HOME": tmp_path / "config",
     }
+    if sys.platform == "win32":
+        monkeypatch.delenv("HOME", raising=False)
+        env_vars["USERPROFILE"] = tmp_path
+    else:
+        monkeypatch.delenv("USERPROFILE", raising=False)
+        env_vars["HOME"] = tmp_path
+
     for env_var_name, env_var_value in env_vars.items():
         monkeypatch.setenv(name=env_var_name, value=str(env_var_value))
 
