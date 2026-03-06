@@ -1,9 +1,10 @@
 import os
 import pathlib
 
-_get = os.environ.get
+PROGRAM = "git-meta"
 
 # https://specifications.freedesktop.org/basedir/latest/
+_get = os.environ.get
 HOME = pathlib.Path(_get("HOME", _get("USERPROFILE", "."))).resolve()
 DATA_HOME = pathlib.Path(_get("XDG_DATA_HOME", HOME / ".local/share"))
 STATE_HOME = pathlib.Path(_get("XDG_STATE_HOME", HOME / ".local/state"))
