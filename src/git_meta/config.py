@@ -61,10 +61,22 @@ def save_config(config: Config, filepath: pathlib.Path | None = None) -> None:
 
 def set_repository_config(
     config: Config,
-    repository_name: str,
+    repository: pathlib.Path,
     key: str,
     value: Any,
 ) -> None:
-    if repository_name not in config.repositories:
-        config.repositories[repository_name] = RepoConfig()
-    setattr(config.repositories[repository_name], key, value)
+    repo_path = str(repository.resolve().absolute())
+    if repo_path not in config.repositories:
+        config.repositories[repo_path] = RepoConfig()
+    setattr(config.repositories[repo_path], key, value)
+
+
+def unset_repository_config(
+    config: Config,
+    repository: pathlib.Path,
+    key: str,
+) -> None:
+    repo_path = str(repository.resolve().absolute())
+    if repo_path not in config.repositories:
+        config.repositories[repo_path] = RepoConfig()
+    delattr(config.repositories[repo_path], key)
