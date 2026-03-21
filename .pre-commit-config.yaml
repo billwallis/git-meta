@@ -71,7 +71,7 @@ repos:
         types: ["python"]
 
   - repo: https://github.com/billwallis/bills-hooks
-    rev: v0.0.9
+    rev: v0.0.10
     hooks:
       - id: check-no-commit-comment
       - id: tidy-gitkeep
