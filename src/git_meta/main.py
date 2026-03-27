@@ -38,12 +38,25 @@ def colour(text: str, colour_: str) -> str:
     return f"{colour_}{text}{RESET}"
 
 
+def _is_sub_git_dir(repo: git.Repo, repos: list[git.Repo]) -> bool:
+    """
+    Return ``True`` if the repo is a subdirectory of another repo, else
+    ``False``.
+    """
+
+    return any(
+        pathlib.Path(repo.working_dir).is_relative_to(other.working_dir)
+        for other in repos
+        if repo != other
+    )
+
+
 def _get_git_repos(directory: pathlib.Path) -> list[git.Repo]:
     """
     Return a sorted list of all git repositories in the given directory.
     """
 
-    return sorted(
+    repos = sorted(
         [
             git.Repo(path)
             for path in directory.glob("**/.git")
@@ -51,6 +64,8 @@ def _get_git_repos(directory: pathlib.Path) -> list[git.Repo]:
         ],
         key=lambda r: r.working_tree_dir,
     )
+
+    return [repo for repo in repos if not _is_sub_git_dir(repo, repos)]
 
 
 def _get_git_repo_status(repository: git.Repo) -> tuple[str, RepoStatus]:
