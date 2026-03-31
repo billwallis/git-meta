@@ -38,6 +38,10 @@ def colour(text: str, colour_: str) -> str:
     return f"{colour_}{text}{RESET}"
 
 
+def _print_multiline(text: str, prefix: str = "") -> None:
+    print(textwrap.indent(text, prefix=prefix))
+
+
 def _is_sub_git_dir(repo: git.Repo, repos: list[git.Repo]) -> bool:
     """
     Return ``True`` if the repo is a subdirectory of another repo, else
@@ -137,11 +141,11 @@ def pull_repo_main_branches(
                         f"\nUpdating {repo.working_tree_dir}...", BOLD + BLUE
                     )
                 )
-                print(textwrap.indent(repo.git.pull(), prefix="\t"))
+                _print_multiline(repo.git.pull(), prefix="\t")
             except TypeError:
-                print(
-                    textwrap.indent(colour("pull skipped", GREY), prefix="\t")
-                )
+                _print_multiline(colour("pull skipped", GREY), prefix="\t")
+            except git.exc.GitCommandError as e:
+                _print_multiline(colour(str(e), RED), prefix="\t")
 
 
 def git_report(
@@ -175,9 +179,4 @@ def git_report(
             status_message = repo_status if quiet_level > 0 else git_status
 
             print(repo_header)
-            print(
-                textwrap.indent(
-                    colour(status_message, status_colour),
-                    prefix="\t",
-                )
-            )
+            _print_multiline(colour(status_message, status_colour), prefix="\t")
