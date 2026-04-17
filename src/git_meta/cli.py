@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
+import functools
 import importlib.metadata
 import pathlib
 from collections.abc import Sequence
@@ -33,16 +35,16 @@ def _get_version() -> str:
     return f"%(prog)s {importlib.metadata.version('git-meta')}"
 
 
-def _update(args: argparse.Namespace) -> int:
-    git_meta.pull_repo_main_branches(
+async def _update(args: argparse.Namespace) -> int:
+    await git_meta.pull_repo_main_branches(
         root_directory=pathlib.Path(getattr(args, "root-dir")),
         fetch=args.fetch,
     )
     return SUCCESS
 
 
-def _report(args: argparse.Namespace) -> int:
-    git_meta.git_report(
+async def _report(args: argparse.Namespace) -> int:
+    await git_meta.git_report(
         root_directory=pathlib.Path(getattr(args, "root-dir")),
         fetch=args.fetch,
         print_all=args.print_all,
@@ -51,7 +53,7 @@ def _report(args: argparse.Namespace) -> int:
     return SUCCESS
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+async def main(argv: Sequence[str] | None = None) -> int:
     """
     Parse the arguments and run the command.
     """
@@ -95,13 +97,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     # print(args)  # for debugging
     if args.command == "update":
-        return _update(args)
+        return await _update(args)
     if args.command == "report":
-        return _report(args)
+        return await _report(args)
 
     parser.print_help()
     return SUCCESS
 
 
+async_main = functools.partial(asyncio.run, main())  # pragma: no cover
 if __name__ == "__main__":
-    raise SystemExit(main())  # pragma: no cover
+    raise SystemExit(async_main())  # pragma: no cover
