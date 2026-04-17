@@ -14,7 +14,7 @@ requires-python = ">=3.13"
 dependencies = [
     "gitpython>=3.1.44",
 ]
-scripts.git-meta = "git_meta.cli:main"
+scripts.git-meta = "git_meta.cli:async_main"
 
 
 [dependency-groups]
