@@ -36,7 +36,7 @@ def _get_version() -> str:
 
 
 async def _update(args: argparse.Namespace) -> int:
-    git_meta.pull_repo_main_branches(
+    await git_meta.pull_repo_main_branches(
         root_directory=pathlib.Path(getattr(args, "root-dir")),
         fetch=args.fetch,
     )
@@ -44,7 +44,7 @@ async def _update(args: argparse.Namespace) -> int:
 
 
 async def _report(args: argparse.Namespace) -> int:
-    git_meta.git_report(
+    await git_meta.git_report(
         root_directory=pathlib.Path(getattr(args, "root-dir")),
         fetch=args.fetch,
         print_all=args.print_all,
