@@ -109,6 +109,33 @@ def _fetch_repo(repository: git.Repo) -> None:
         origin.fetch()
 
 
+def _pull_repo_main_branch(
+    repo: git.Repo,
+    conf: config.Config,
+    fetch: bool,
+) -> None:
+    if fetch:
+        _fetch_repo(repo)
+
+    git_status, _ = _get_git_repo_status(repo)
+    if repo_config := conf.repositories.get(str(repo.working_tree_dir)):
+        default_branch = repo_config.default_branch_name
+    else:
+        default_branch = "main"
+
+    if (
+        "Your branch is behind" in git_status
+        and f"On branch {default_branch}" in git_status
+    ):
+        try:
+            print(colour(f"\nUpdating {repo.working_tree_dir}...", BOLD + BLUE))
+            _print_multiline(repo.git.pull(), prefix="\t")
+        except TypeError:
+            _print_multiline(colour("pull skipped", GREY), prefix="\t")
+        except git.exc.GitCommandError as e:
+            _print_multiline(colour(str(e), RED), prefix="\t")
+
+
 def pull_repo_main_branches(
     root_directory: pathlib.Path,
     fetch: bool,
@@ -122,30 +149,11 @@ def pull_repo_main_branches(
     conf = config.load_config()
     print(f"Found {len(repositories)} git repositories")
     for repo in repositories:
-        if fetch:
-            _fetch_repo(repo)
-
-        git_status, _ = _get_git_repo_status(repo)
-        if repo_config := conf.repositories.get(str(repo.working_tree_dir)):
-            default_branch = repo_config.default_branch_name
-        else:
-            default_branch = "main"
-
-        if (
-            "Your branch is behind" in git_status
-            and f"On branch {default_branch}" in git_status
-        ):
-            try:
-                print(
-                    colour(
-                        f"\nUpdating {repo.working_tree_dir}...", BOLD + BLUE
-                    )
-                )
-                _print_multiline(repo.git.pull(), prefix="\t")
-            except TypeError:
-                _print_multiline(colour("pull skipped", GREY), prefix="\t")
-            except git.exc.GitCommandError as e:
-                _print_multiline(colour(str(e), RED), prefix="\t")
+        _pull_repo_main_branch(
+            repo=repo,
+            conf=conf,
+            fetch=fetch,
+        )
 
 
 def git_report(
