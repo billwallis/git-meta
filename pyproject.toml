@@ -12,7 +12,7 @@ authors = [{name = "billwallis"}]
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "gitpython>=3.1.44",
+    "gitpython>=3.1.47",
 ]
 scripts.git-meta = "git_meta.cli:async_main"
 
