@@ -17,7 +17,6 @@ GREY = "\033[38;5;240m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
 
-
 type GitWorkingDir = pathlib.Path
 
 
@@ -41,10 +40,6 @@ def colour(text: str, colour_: str) -> str:
     """
 
     return f"{colour_}{text}{RESET}"
-
-
-def _print_multiline(text: str, prefix: str = "") -> None:
-    print(textwrap.indent(text, prefix=prefix), flush=True)
 
 
 def _is_subdirectory(
@@ -82,16 +77,12 @@ def _get_git_repos(directory: pathlib.Path) -> list[GitWorkingDir]:
 
 
 def _get_git_repo_branches(repo_dir: GitWorkingDir) -> list[str]:
-    rc, out, err = git.run_git_cmd(
+    rc, out, _ = git.run_git_cmd(
         args=("branch", "--list"),
         git_dir=repo_dir,
     )
 
-    if rc != 0:
-        print(err)
-        return []
-
-    return [b[2:] for b in out.split("\n")]
+    return [b[2:] for b in out.split("\n")] if rc == 0 else []
 
 
 def _get_git_repo_status(repo_dir: GitWorkingDir) -> tuple[str, RepoStatus]:  # noqa: PLR0911
@@ -132,23 +123,19 @@ def _get_remote_url(
     repo_dir: GitWorkingDir,
     origin_name: str = "origin",
 ) -> str:
-    rc, out, err = git.run_git_cmd(
+    rc, out, _ = git.run_git_cmd(
         args=("remote", "get-url", origin_name),
         git_dir=repo_dir,
     )
 
-    if rc != 0:
-        print(err)
-        return ""
-
-    return out
+    return out if rc == 0 else ""
 
 
 def _fetch_repo(
     repo_dir: GitWorkingDir,
     origin_name: str = "origin",
-) -> str:
-    rc, out, err = git.run_git_cmd(
+) -> None:
+    git.run_git_cmd(
         args=(
             "fetch",
             origin_name,
@@ -159,19 +146,24 @@ def _fetch_repo(
         git_dir=repo_dir,
     )
 
-    return out if rc == 0 else err
 
-
-def _pull_repo(repo_dir: GitWorkingDir) -> str:
+def _pull_repo(repo_dir: GitWorkingDir) -> tuple[int, str]:
     rc, out, err = git.run_git_cmd(
         args=("pull", "--no-recurse-submodules"),
         git_dir=repo_dir,
     )
 
-    if rc != 0:
-        raise GitError(err)
+    if rc == 0:
+        return rc, out
+    else:
+        return rc, err
 
-    return out
+
+def _print_multiline(text: str, header: str = "", prefix: str = "") -> None:
+    print(
+        header + "\n" + textwrap.indent(text, prefix=prefix),
+        flush=True,
+    )
 
 
 def _pull_repo_main_branch(
@@ -180,27 +172,47 @@ def _pull_repo_main_branch(
     fetch: bool,
 ) -> None:
     if fetch:
-        if progress := _fetch_repo(repo_dir):
-            _print_multiline(progress)
+        _fetch_repo(repo_dir)
 
     git_status, _ = _get_git_repo_status(repo_dir)
     if repo_config := conf.repositories.get(str(repo_dir)):
         default_branch = repo_config.default_branch_name
     else:
-        default_branch = "main"
+        default_branch = "main"  # TODO: use `git config get init.defaultbranch`
 
     if (
         "Your branch is behind" in git_status
         and f"On branch {default_branch}" in git_status
     ):
-        try:
-            print(
-                colour(f"\nUpdating {repo_dir}...", BOLD + BLUE),
-                flush=True,
-            )
-            _print_multiline(_pull_repo(repo_dir), prefix="\t")
-        except GitError as e:
-            _print_multiline(colour(str(e), RED), prefix="\t")
+        rc, progress = _pull_repo(repo_dir)
+        _print_multiline(
+            text=progress if rc == 0 else colour(progress, RED),
+            header=colour(f"\nUpdating {repo_dir}...", BOLD + BLUE),
+            prefix="\t",
+        )
+
+
+def _report_on_repo(
+    repo_dir: GitWorkingDir,
+    fetch: bool,
+    print_all: bool,
+    quiet_level: int,
+) -> None:
+    if fetch:
+        _fetch_repo(repo_dir)
+
+    git_status, repo_status = _get_git_repo_status(repo_dir)
+    repo_header = colour(f"\n{repo_dir}", BOLD + BLUE)
+    if remote_url := _get_remote_url(repo_dir, "origin"):
+        repo_header += colour(f"  (origin: {remote_url})", GREY)
+
+    if print_all or repo_status != RepoStatus.CLEAN_AND_UPDATED:
+        status_message = repo_status if quiet_level > 0 else git_status
+        _print_multiline(
+            text=colour(status_message, _get_status_colour(repo_status)),
+            header=repo_header,
+            prefix="\t",
+        )
 
 
 async def pull_repo_main_branches(
@@ -231,29 +243,7 @@ async def pull_repo_main_branches(
         return_exceptions=True,
     )
 
-
-def _report_on_repo(
-    repo_dir: GitWorkingDir,
-    fetch: bool,
-    print_all: bool,
-    quiet_level: int,
-) -> None:
-    if fetch:
-        if progress := _fetch_repo(repo_dir):
-            _print_multiline(progress)
-
-    remote_url = _get_remote_url(repo_dir, "origin")
-    git_status, repo_status = _get_git_repo_status(repo_dir)
-    repo_header = colour(f"\n{repo_dir}", BOLD + BLUE)
-    if remote_url:
-        repo_header += colour(f"  (origin: {remote_url})", GREY)
-
-    if print_all or repo_status != RepoStatus.CLEAN_AND_UPDATED:
-        status_colour = _get_status_colour(repo_status)
-        status_message = repo_status if quiet_level > 0 else git_status
-
-        print(repo_header, flush=True)
-        _print_multiline(colour(status_message, status_colour), prefix="\t")
+    print(colour("All repositories updated!", GREEN), flush=True)
 
 
 async def git_report(
@@ -273,14 +263,16 @@ async def git_report(
     repositories = _get_git_repos(directory=root_directory)
     print(f"Found {len(repositories)} git repositories", flush=True)
 
-    futures = [
-        asyncio.to_thread(
-            _report_on_repo,
-            repo_dir=repo,
-            fetch=fetch,
-            print_all=print_all,
-            quiet_level=quiet_level,
-        )
-        for repo in repositories
-    ]
-    await asyncio.gather(*futures, return_exceptions=True)
+    await asyncio.gather(
+        *[
+            asyncio.to_thread(
+                _report_on_repo,
+                repo_dir=repo,
+                fetch=fetch,
+                print_all=print_all,
+                quiet_level=quiet_level,
+            )
+            for repo in repositories
+        ],
+        return_exceptions=True,
+    )
