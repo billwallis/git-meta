@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import enum
 import pathlib
 import textwrap
 
-import git
-
-from git_meta import config
+from git_meta import config, git
 
 RED = "\033[1;31m"
 GREEN = "\033[1;32m"
@@ -19,6 +16,13 @@ CYAN = "\033[1;36m"
 GREY = "\033[38;5;240m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
+
+
+type GitWorkingDir = pathlib.Path
+
+
+class GitError(Exception):
+    pass
 
 
 # TODO: These are not mutually exclusive, so an Enum is not appropriate
@@ -43,45 +47,69 @@ def _print_multiline(text: str, prefix: str = "") -> None:
     print(textwrap.indent(text, prefix=prefix), flush=True)
 
 
-def _is_sub_git_dir(repo: git.Repo, repos: list[git.Repo]) -> bool:
+def _is_subdirectory(
+    repo_dir: GitWorkingDir,
+    repo_dirs: list[GitWorkingDir],
+) -> bool:
     """
-    Return ``True`` if the repo is a subdirectory of another repo, else
-    ``False``.
+    Return ``True`` if the repository directory is a subdirectory of another
+    repository directory, else ``False``.
     """
 
     return any(
-        pathlib.Path(repo.working_dir).is_relative_to(other.working_dir)
-        for other in repos
-        if repo != other
+        repo_dir.is_relative_to(other)
+        for other in repo_dirs
+        if repo_dir != other
     )
 
 
-def _get_git_repos(directory: pathlib.Path) -> list[git.Repo]:
+def _get_git_repos(directory: pathlib.Path) -> list[GitWorkingDir]:
     """
     Return a sorted list of all git repositories in the given directory.
     """
 
-    repos = sorted(
-        [
-            git.Repo(path)
-            for path in directory.glob("**/.git")
-            if path.is_dir()  # skip git submodules
-        ],
-        key=lambda r: r.working_tree_dir,
+    repos = [
+        path.parent.resolve()
+        for path in directory.glob("**/.git")
+        if path.is_dir()  # skip git submodules
+    ]
+
+    return [
+        repo_path
+        for repo_path in sorted(repos)
+        if not _is_subdirectory(repo_path, repos)
+    ]
+
+
+def _get_git_repo_branches(repo_dir: GitWorkingDir) -> list[str]:
+    rc, out, err = git.run_git_cmd(
+        args=("branch", "--list"),
+        git_dir=repo_dir,
     )
 
-    return [repo for repo in repos if not _is_sub_git_dir(repo, repos)]
+    if rc != 0:
+        print(err)
+        return []
+
+    return [b[2:] for b in out.split("\n")]
 
 
-def _get_git_repo_status(repository: git.Repo) -> tuple[str, RepoStatus]:
-    status = repository.git.status()
-    if repository.is_dirty():
+def _get_git_repo_status(repo_dir: GitWorkingDir) -> tuple[str, RepoStatus]:  # noqa: PLR0911
+    rc, out, err = git.run_git_cmd(
+        args=("status",),
+        git_dir=repo_dir,
+    )
+
+    status = out
+    if rc != 0:
+        return err, RepoStatus.UNKNOWN
+    if "Changes not staged for commit" in status:
         return status, RepoStatus.DIRTY
     if "Your branch is behind" in status:
         return status, RepoStatus.BEHIND_REMOTE
     if "Untracked files" in status:
         return status, RepoStatus.UNTRACKED_FILES
-    if len(repository.branches) > 1:
+    if len(_get_git_repo_branches(repo_dir)) > 1:
         return status, RepoStatus.MULTIPLE_BRANCHES
     if "nothing to commit, working tree clean" in status:
         return status, RepoStatus.CLEAN_AND_UPDATED
@@ -100,26 +128,63 @@ def _get_status_colour(repository_status: RepoStatus) -> str:
     }[repository_status]
 
 
-def _fetch_repo(repository: git.Repo) -> None:
-    try:
-        origin = repository.remote("origin")
-    except ValueError:
-        return
+def _get_remote_url(
+    repo_dir: GitWorkingDir,
+    origin_name: str = "origin",
+) -> str:
+    rc, out, err = git.run_git_cmd(
+        args=("remote", "get-url", origin_name),
+        git_dir=repo_dir,
+    )
 
-    with contextlib.suppress(git.exc.GitCommandError):
-        origin.fetch()
+    if rc != 0:
+        print(err)
+        return ""
+
+    return out
+
+
+def _fetch_repo(
+    repo_dir: GitWorkingDir,
+    origin_name: str = "origin",
+) -> str:
+    rc, out, err = git.run_git_cmd(
+        args=(
+            "fetch",
+            origin_name,
+            "--no-recurse-submodules",
+            "--progress",
+            "--prune",
+        ),
+        git_dir=repo_dir,
+    )
+
+    return out if rc == 0 else err
+
+
+def _pull_repo(repo_dir: GitWorkingDir) -> str:
+    rc, out, err = git.run_git_cmd(
+        args=("pull", "--no-recurse-submodules"),
+        git_dir=repo_dir,
+    )
+
+    if rc != 0:
+        raise GitError(err)
+
+    return out
 
 
 def _pull_repo_main_branch(
-    repo: git.Repo,
+    repo_dir: GitWorkingDir,
     conf: config.Config,
     fetch: bool,
 ) -> None:
     if fetch:
-        _fetch_repo(repo)
+        if progress := _fetch_repo(repo_dir):
+            _print_multiline(progress)
 
-    git_status, _ = _get_git_repo_status(repo)
-    if repo_config := conf.repositories.get(str(repo.working_tree_dir)):
+    git_status, _ = _get_git_repo_status(repo_dir)
+    if repo_config := conf.repositories.get(str(repo_dir)):
         default_branch = repo_config.default_branch_name
     else:
         default_branch = "main"
@@ -130,13 +195,11 @@ def _pull_repo_main_branch(
     ):
         try:
             print(
-                colour(f"\nUpdating {repo.working_tree_dir}...", BOLD + BLUE),
+                colour(f"\nUpdating {repo_dir}...", BOLD + BLUE),
                 flush=True,
             )
-            _print_multiline(repo.git.pull(), prefix="\t")
-        except TypeError:
-            _print_multiline(colour("pull skipped", GREY), prefix="\t")
-        except git.exc.GitCommandError as e:
+            _print_multiline(_pull_repo(repo_dir), prefix="\t")
+        except GitError as e:
             _print_multiline(colour(str(e), RED), prefix="\t")
 
 
@@ -159,7 +222,7 @@ async def pull_repo_main_branches(
         *[
             asyncio.to_thread(
                 _pull_repo_main_branch,
-                repo=repo,
+                repo_dir=repo,
                 conf=conf,
                 fetch=fetch,
             )
@@ -170,20 +233,18 @@ async def pull_repo_main_branches(
 
 
 def _report_on_repo(
-    repo: git.Repo,
+    repo_dir: GitWorkingDir,
     fetch: bool,
     print_all: bool,
     quiet_level: int,
 ) -> None:
     if fetch:
-        _fetch_repo(repo)
+        if progress := _fetch_repo(repo_dir):
+            _print_multiline(progress)
 
-    remote_url = ""
-    with contextlib.suppress(ValueError):
-        remote_url = repo.remote("origin").url
-
-    git_status, repo_status = _get_git_repo_status(repo)
-    repo_header = colour(f"\n{repo.working_tree_dir}", BOLD + BLUE)
+    remote_url = _get_remote_url(repo_dir, "origin")
+    git_status, repo_status = _get_git_repo_status(repo_dir)
+    repo_header = colour(f"\n{repo_dir}", BOLD + BLUE)
     if remote_url:
         repo_header += colour(f"  (origin: {remote_url})", GREY)
 
@@ -215,7 +276,7 @@ async def git_report(
     futures = [
         asyncio.to_thread(
             _report_on_repo,
-            repo=repo,
+            repo_dir=repo,
             fetch=fetch,
             print_all=print_all,
             quiet_level=quiet_level,
