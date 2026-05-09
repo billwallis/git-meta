@@ -39,6 +39,8 @@ async def _update(args: argparse.Namespace) -> int:
     await git_meta.pull_repo_main_branches(
         root_directory=pathlib.Path(getattr(args, "root-dir")),
         fetch=args.fetch,
+        select=args.select,
+        exclude=args.exclude,
     )
     return SUCCESS
 
@@ -47,10 +49,35 @@ async def _report(args: argparse.Namespace) -> int:
     await git_meta.git_report(
         root_directory=pathlib.Path(getattr(args, "root-dir")),
         fetch=args.fetch,
+        select=args.select,
+        exclude=args.exclude,
         print_all=args.print_all,
         quiet_level=args.quiet,
     )
     return SUCCESS
+
+
+def _add_shared_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "root-dir",
+        help="the root directory to discover git repositories from",
+    )
+    parser.add_argument(
+        "--fetch",
+        help="whether to fetch updates from the remote",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    parser.add_argument(
+        "--select",
+        help="regex pattern to include repositories, matches full file path",
+        default="",
+    )
+    parser.add_argument(
+        "--exclude",
+        help="regex pattern to exclude repositories, matches full file path",
+        default="^$",
+    )
 
 
 async def main(argv: Sequence[str] | None = None) -> int:
@@ -68,28 +95,20 @@ async def main(argv: Sequence[str] | None = None) -> int:
     subparsers = parser.add_subparsers(dest="command")
 
     parser__update = subparsers.add_parser("update")
-    parser__update.add_argument("root-dir")
-    parser__update.add_argument(
-        "--fetch",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-    )
+    _add_shared_arguments(parser__update)
 
     parser__report = subparsers.add_parser("report")
-    parser__report.add_argument("root-dir")
-    parser__report.add_argument(
-        "--fetch",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-    )
+    _add_shared_arguments(parser__report)
     parser__report.add_argument(
         "--print-all",
+        help="whether to report on all discovered git repositories. defaults to only dirty repos",
         action=argparse.BooleanOptionalAction,
         default=False,
     )
     parser__report.add_argument(
         "-q",
         "--quiet",
+        help="reduce the verbosity level",
         action="count",
         default=0,
     )

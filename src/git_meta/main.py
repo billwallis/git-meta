@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import enum
 import pathlib
+import re
 import textwrap
 
 from git_meta import config, git
@@ -58,9 +59,14 @@ def _is_subdirectory(
     )
 
 
-def _get_git_repos(directory: pathlib.Path) -> list[GitWorkingDir]:
+def _get_git_repos(
+    directory: pathlib.Path,
+    select: str,
+    exclude: str,
+) -> list[GitWorkingDir]:
     """
-    Return a sorted list of all git repositories in the given directory.
+    Return a sorted list of all git repositories in the given directory with
+    the inclusions and exclusions applied.
     """
 
     repos = [
@@ -68,11 +74,16 @@ def _get_git_repos(directory: pathlib.Path) -> list[GitWorkingDir]:
         for path in directory.glob("**/.git")
         if path.is_dir()  # skip git submodules
     ]
+    selected_repos = [
+        repo
+        for repo in repos
+        if re.match(select, str(repo)) and not re.match(exclude, str(repo))
+    ]
 
     return [
         repo_path
-        for repo_path in sorted(repos)
-        if not _is_subdirectory(repo_path, repos)
+        for repo_path in sorted(selected_repos)
+        if not _is_subdirectory(repo_path, selected_repos)
     ]
 
 
@@ -217,7 +228,9 @@ def _report_on_repo(
 
 async def pull_repo_main_branches(
     root_directory: pathlib.Path,
-    fetch: bool,
+    fetch: bool = True,
+    select: str = "",
+    exclude: str = "^$",
 ) -> None:
     """
     Pull the default branches.
@@ -226,7 +239,11 @@ async def pull_repo_main_branches(
     print(
         f"Updating git repositories at '{root_directory.resolve()}'", flush=True
     )
-    repositories = _get_git_repos(directory=root_directory)
+    repositories = _get_git_repos(
+        directory=root_directory,
+        select=select,
+        exclude=exclude,
+    )
     conf = config.load_config()
     print(f"Found {len(repositories)} git repositories", flush=True)
 
@@ -246,11 +263,13 @@ async def pull_repo_main_branches(
     print(colour("All repositories updated!", GREEN), flush=True)
 
 
-async def git_report(
+async def git_report(  # noqa: PLR0913
     root_directory: pathlib.Path,
-    fetch: bool,
-    print_all: bool,
-    quiet_level: int,
+    fetch: bool = True,
+    select: str = "",
+    exclude: str = "^$",
+    print_all: bool = False,
+    quiet_level: int = 0,
 ) -> None:
     """
     Report on git repositories in the given directory.
@@ -260,7 +279,11 @@ async def git_report(
         f"Reporting on git repositories at '{root_directory.resolve()}'",
         flush=True,
     )
-    repositories = _get_git_repos(directory=root_directory)
+    repositories = _get_git_repos(
+        directory=root_directory,
+        select=select,
+        exclude=exclude,
+    )
     print(f"Found {len(repositories)} git repositories", flush=True)
 
     await asyncio.gather(
