@@ -10,10 +10,10 @@ version = "0.0.0"
 description = "Check the git status of repositories in a directory."
 authors = [{name = "billwallis"}]
 readme = "README.md"
+license-files = ["LICENSE"]
 requires-python = ">=3.13"
 dependencies = []
 scripts.git-meta = "git_meta.cli:async_main"
-
 
 [dependency-groups]
 dev = [
@@ -68,8 +68,13 @@ shell = """
 
 
 [tool.pytest.ini_options]
-addopts = "--cov=src --cov-fail-under=00"
+addopts = "--cov=src"
 testpaths = ["tests"]
+
+[tool.coverage]
+run.branch = true
+#report.fail_under = 80
+report.show_missing = true
 
 
 [tool.ruff]
