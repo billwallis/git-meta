@@ -170,9 +170,13 @@ def _pull_repo(repo_dir: GitWorkingDir) -> tuple[int, str]:
         return rc, err
 
 
-def _print_multiline(text: str, header: str = "", prefix: str = "") -> None:
+# TODO: Printing should be a CLI-only behaviour. This module should just
+#       return some results object which the CLI prints
+def _print_multiline(
+    text: str, header: str = "", text_prefix: str = ""
+) -> None:
     print(
-        header + "\n" + textwrap.indent(text, prefix=prefix),
+        header + "\n" + textwrap.indent(text, prefix=text_prefix),
         flush=True,
     )
 
@@ -197,9 +201,9 @@ def _pull_repo_main_branch(
     ):
         rc, progress = _pull_repo(repo_dir)
         _print_multiline(
+            header=colour(f"Updating {repo_dir}...", BOLD + BLUE),
             text=progress if rc == 0 else colour(progress, RED),
-            header=colour(f"\nUpdating {repo_dir}...", BOLD + BLUE),
-            prefix="\t",
+            text_prefix="\t",
         )
 
 
@@ -213,16 +217,16 @@ def _report_on_repo(
         _fetch_repo(repo_dir)
 
     git_status, repo_status = _get_git_repo_status(repo_dir)
-    repo_header = colour(f"\n{repo_dir}", BOLD + BLUE)
+    repo_header = colour(str(repo_dir), BOLD + BLUE)
     if remote_url := _get_remote_url(repo_dir, "origin"):
         repo_header += colour(f"  (origin: {remote_url})", GREY)
 
     if print_all or repo_status != RepoStatus.CLEAN_AND_UPDATED:
         status_message = repo_status if quiet_level > 0 else git_status
         _print_multiline(
-            text=colour(status_message, _get_status_colour(repo_status)),
             header=repo_header,
-            prefix="\t",
+            text=colour(status_message, _get_status_colour(repo_status)),
+            text_prefix="\t",
         )
 
 
