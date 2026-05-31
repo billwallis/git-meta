@@ -5,6 +5,7 @@ import asyncio
 import functools
 import importlib.metadata
 import pathlib
+import textwrap
 from collections.abc import Sequence
 
 import git_meta
@@ -35,25 +36,68 @@ def _get_version() -> str:
     return f"%(prog)s {importlib.metadata.version('git-meta')}"
 
 
+def _print_multiline(
+    text: str,
+    header: str = "",
+    text_prefix: str = "",
+) -> None:
+    print(
+        header + "\n" + textwrap.indent(text, prefix=text_prefix),
+        flush=True,
+    )
+
+
 async def _update(args: argparse.Namespace) -> int:
-    await git_meta.pull_repo_main_branches(
-        root_directory=pathlib.Path(getattr(args, "root-dir")),
-        fetch=args.fetch,
+    root_directory = pathlib.Path(getattr(args, "root-dir"))
+    print(
+        f"Updating git repositories at '{root_directory.resolve()}'", flush=True
+    )
+
+    repositories = git_meta.get_git_repos(
+        directory=root_directory,
         select=args.select,
         exclude=args.exclude,
     )
+    print(f"Found {len(repositories)} git repositories", flush=True)
+
+    report_results = git_meta.pull_repo_main_branches(
+        repositories=repositories,
+        fetch=args.fetch,
+    )
+    async for report_result in report_results:
+        rc, header, summary = report_result
+        if rc != -1:
+            _print_multiline(header=header, text=summary, text_prefix="\t")
+
+    print(colour("All repositories updated!", GREEN), flush=True)
     return SUCCESS
 
 
 async def _report(args: argparse.Namespace) -> int:
-    await git_meta.git_report(
-        root_directory=pathlib.Path(getattr(args, "root-dir")),
-        fetch=args.fetch,
+    root_directory = pathlib.Path(getattr(args, "root-dir"))
+    print(
+        f"Reporting on git repositories at '{root_directory.resolve()}'",
+        flush=True,
+    )
+
+    repositories = git_meta.get_git_repos(
+        directory=root_directory,
         select=args.select,
         exclude=args.exclude,
+    )
+    print(f"Found {len(repositories)} git repositories", flush=True)
+
+    report_results = git_meta.git_report(
+        repositories=repositories,
+        fetch=args.fetch,
         print_all=args.print_all,
         quiet_level=args.quiet,
     )
+    async for report_result in report_results:
+        rc, header, summary = report_result
+        if rc != -1:
+            _print_multiline(header=header, text=summary, text_prefix="\t")
+
     return SUCCESS
 
 
@@ -100,7 +144,7 @@ async def main(argv: Sequence[str] | None = None) -> int:
     parser__report = subparsers.add_parser("report")
     _add_shared_arguments(parser__report)
     parser__report.add_argument(
-        "--print-all",
+        "--print-all",  # TODO: Control this via the verbosity
         help="whether to report on all discovered git repositories. defaults to only dirty repos",
         action=argparse.BooleanOptionalAction,
         default=False,
