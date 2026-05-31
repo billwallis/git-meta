@@ -4,7 +4,7 @@ import asyncio
 import enum
 import pathlib
 import re
-import textwrap
+from collections.abc import AsyncGenerator
 
 from git_meta import config, git
 
@@ -19,6 +19,9 @@ BOLD = "\033[1m"
 RESET = "\033[0m"
 
 type GitWorkingDir = pathlib.Path
+# TODO: design a better API than this!
+type UpdateResult = tuple[int, str, str]  # rc, title, summary
+type ReportResult = tuple[int, str, str]  # rc, title, summary
 
 
 class GitError(Exception):
@@ -59,7 +62,7 @@ def _is_subdirectory(
     )
 
 
-def _get_git_repos(
+def get_git_repos(
     directory: pathlib.Path,
     select: str,
     exclude: str,
@@ -170,22 +173,11 @@ def _pull_repo(repo_dir: GitWorkingDir) -> tuple[int, str]:
         return rc, err
 
 
-# TODO: Printing should be a CLI-only behaviour. This module should just
-#       return some results object which the CLI prints
-def _print_multiline(
-    text: str, header: str = "", text_prefix: str = ""
-) -> None:
-    print(
-        header + "\n" + textwrap.indent(text, prefix=text_prefix),
-        flush=True,
-    )
-
-
 def _pull_repo_main_branch(
     repo_dir: GitWorkingDir,
     conf: config.Config,
     fetch: bool,
-) -> None:
+) -> UpdateResult | None:
     if fetch:
         _fetch_repo(repo_dir)
 
@@ -200,11 +192,13 @@ def _pull_repo_main_branch(
         and f"On branch {default_branch}" in git_status
     ):
         rc, progress = _pull_repo(repo_dir)
-        _print_multiline(
-            header=colour(f"Updating {repo_dir}...", BOLD + BLUE),
-            text=progress if rc == 0 else colour(progress, RED),
-            text_prefix="\t",
+        return (
+            rc,
+            colour(f"Updating {repo_dir}...", BOLD + BLUE),
+            progress if rc == 0 else colour(progress, RED),
         )
+
+    return -1, "", ""
 
 
 def _report_on_repo(
@@ -212,7 +206,7 @@ def _report_on_repo(
     fetch: bool,
     print_all: bool,
     quiet_level: int,
-) -> None:
+) -> ReportResult:
     if fetch:
         _fetch_repo(repo_dir)
 
@@ -223,75 +217,49 @@ def _report_on_repo(
 
     if print_all or repo_status != RepoStatus.CLEAN_AND_UPDATED:
         status_message = repo_status if quiet_level > 0 else git_status
-        _print_multiline(
-            header=repo_header,
-            text=colour(status_message, _get_status_colour(repo_status)),
-            text_prefix="\t",
+        return (
+            0 if repo_status.CLEAN_AND_UPDATED else 1,
+            repo_header,
+            colour(status_message, _get_status_colour(repo_status)),
         )
+
+    return -1, "", ""
 
 
 async def pull_repo_main_branches(
-    root_directory: pathlib.Path,
+    repositories: list[pathlib.Path],
     fetch: bool = True,
-    select: str = "",
-    exclude: str = "^$",
-) -> None:
+) -> AsyncGenerator[UpdateResult]:
     """
-    Pull the default branches.
+    Pull the default branches on the given git repositories.
     """
 
-    print(
-        f"Updating git repositories at '{root_directory.resolve()}'", flush=True
-    )
-    repositories = _get_git_repos(
-        directory=root_directory,
-        select=select,
-        exclude=exclude,
-    )
-    conf = config.load_config()
-    print(f"Found {len(repositories)} git repositories", flush=True)
-
-    await asyncio.gather(
-        *[
+    for future in asyncio.as_completed(
+        [
             asyncio.to_thread(
                 _pull_repo_main_branch,
                 repo_dir=repo,
-                conf=conf,
+                conf=config.load_config(),
                 fetch=fetch,
             )
             for repo in repositories
-        ],
-        return_exceptions=True,
-    )
-
-    print(colour("All repositories updated!", GREEN), flush=True)
+        ]
+    ):
+        yield await future
 
 
-async def git_report(  # noqa: PLR0913
-    root_directory: pathlib.Path,
+async def git_report(
+    repositories: list[pathlib.Path],
     fetch: bool = True,
-    select: str = "",
-    exclude: str = "^$",
-    print_all: bool = False,
+    print_all: bool = False,  # TODO: Control this via the verbosity
     quiet_level: int = 0,
-) -> None:
+) -> AsyncGenerator[ReportResult]:
     """
-    Report on git repositories in the given directory.
+    Report on the given git repositories.
     """
 
-    print(
-        f"Reporting on git repositories at '{root_directory.resolve()}'",
-        flush=True,
-    )
-    repositories = _get_git_repos(
-        directory=root_directory,
-        select=select,
-        exclude=exclude,
-    )
-    print(f"Found {len(repositories)} git repositories", flush=True)
-
-    await asyncio.gather(
-        *[
+    for future in asyncio.as_completed(
+        [
             asyncio.to_thread(
                 _report_on_repo,
                 repo_dir=repo,
@@ -300,6 +268,6 @@ async def git_report(  # noqa: PLR0913
                 quiet_level=quiet_level,
             )
             for repo in repositories
-        ],
-        return_exceptions=True,
-    )
+        ]
+    ):
+        yield await future
