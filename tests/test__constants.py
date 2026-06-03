@@ -41,10 +41,10 @@ def test__constants__environment_variables_are_used(
         "XDG_CACHE_HOME": tmp_path / "cache",
         "XDG_CONFIG_HOME": tmp_path / "config",
     }
-    if sys.platform == "win32":
+    if sys.platform == "win32":  # pragma: win32 cover
         monkeypatch.delenv("HOME", raising=False)
         env_vars["USERPROFILE"] = tmp_path
-    else:
+    else:  # pragma: win32 no cover
         monkeypatch.delenv("USERPROFILE", raising=False)
         env_vars["HOME"] = tmp_path
 
