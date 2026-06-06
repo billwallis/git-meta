@@ -4,7 +4,7 @@ import asyncio
 import enum
 import pathlib
 import re
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 
 from git_meta import config, git
 
@@ -46,22 +46,6 @@ def colour(text: str, colour_: str) -> str:
     return f"{colour_}{text}{RESET}"
 
 
-def _is_subdirectory(
-    repo_dir: GitWorkingDir,
-    repo_dirs: list[GitWorkingDir],
-) -> bool:
-    """
-    Return ``True`` if the repository directory is a subdirectory of another
-    repository directory, else ``False``.
-    """
-
-    return any(
-        repo_dir.is_relative_to(other)
-        for other in repo_dirs
-        if repo_dir != other
-    )
-
-
 def get_git_repos(
     directory: pathlib.Path,
     select: str,
@@ -72,22 +56,26 @@ def get_git_repos(
     the inclusions and exclusions applied.
     """
 
-    repos = [
-        path.parent.resolve()
-        for path in directory.glob("**/.git")
-        if path.is_dir()  # skip git submodules
-    ]
-    selected_repos = [
-        repo
-        for repo in repos
-        if re.match(select, str(repo)) and not re.match(exclude, str(repo))
-    ]
+    def walk(path: pathlib.Path) -> Generator[pathlib.Path]:
+        # If the path is a git repo...
+        if path.is_dir() and (path / ".git").exists():
+            # ...and matches the inclusion filters
+            if re.match(select, str(path)) and not re.match(exclude, str(path)):
+                # ...then yield the path, which will skip nesting git repos
+                yield path
+        # ...else, skip files and walk dirs
+        elif path.is_dir():
+            try:
+                children = path.iterdir()
+            except PermissionError:
+                return
 
-    return [
-        repo_path
-        for repo_path in sorted(selected_repos)
-        if not _is_subdirectory(repo_path, selected_repos)
-    ]
+            for child in children:
+                yield from walk(child)
+        else:
+            return
+
+    return sorted(walk(directory))
 
 
 def _get_git_repo_branches(repo_dir: GitWorkingDir) -> list[str]:
