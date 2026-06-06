@@ -20,6 +20,6 @@ Check the git status of repositories in a directory.
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and then install the dependencies:
 
-```bash
+```shell
 uvx --from poethepoet poe install
 ```
