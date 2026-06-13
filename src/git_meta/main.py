@@ -62,7 +62,7 @@ def get_git_repos(
             # ...and matches the inclusion filters
             if re.match(select, str(path)) and not re.match(exclude, str(path)):
                 # ...then yield the path, which will skip nesting git repos
-                yield path
+                yield path.resolve()
         # ...else, skip files and walk dirs
         elif path.is_dir():
             try:
