@@ -13,7 +13,7 @@
 
 # Git Meta
 
-Check the git status of repositories in a directory.
+Tools for handling many Git repositories.
 
 ## Contributing
 
