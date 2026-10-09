@@ -5,8 +5,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "git-meta"
-version = "0.0.1"
-description = "Check the git status of repositories in a directory."
+version = "0.0.2"
+description = "Tools for handling many Git repositories."
 authors = [{name = "billwallis"}]
 readme = "README.md"
 license-files = ["LICENSE"]
