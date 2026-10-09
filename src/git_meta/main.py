@@ -142,8 +142,13 @@ def _fetch_repo(
             "fetch",
             origin_name,
             "--no-recurse-submodules",
+            "--porcelain",
             "--progress",
             "--prune",
+            # `--tags --force` needed to handle mutable tags:
+            #  https://stackoverflow.com/a/58438257/8213085
+            "--tags",
+            "--force",
         ),
         git_dir=repo_dir,
     )
